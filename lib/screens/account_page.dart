@@ -13,7 +13,7 @@ class AccountPage extends StatefulWidget {
 class _AccountPageState extends State<AccountPage> {
   final _usernameController = TextEditingController();
   final _websiteController = TextEditingController();
-
+  String? _imageUrl;
   String? _avatarUrl;
   var _loading = true;
 

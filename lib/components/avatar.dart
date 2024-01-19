@@ -3,7 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:ticket_app/main.dart';
 
-class Avatar extends StatefulWidget {
+class Avatar extends StatelessWidget {
   const Avatar({
     super.key,
     required this.imageUrl,
@@ -11,89 +11,58 @@ class Avatar extends StatefulWidget {
   });
 
   final String? imageUrl;
-  final void Function(String) onUpload;
-
-  @override
-  _AvatarState createState() => _AvatarState();
-}
-
-class _AvatarState extends State<Avatar> {
-  bool _isLoading = false;
+  final void Function(String imageUrl) onUpload;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        if (widget.imageUrl == null || widget.imageUrl!.isEmpty)
-          Container(
-            width: 150,
-            height: 150,
-            color: Colors.grey,
-            child: const Center(
-              child: Text('No Image'),
-            ),
-          )
-        else
-          Image.network(
-            widget.imageUrl!,
-            width: 150,
-            height: 150,
-            fit: BoxFit.cover,
-          ),
+        SizedBox(
+          width: 150,
+          height: 150,
+          child: imageUrl != null
+              ? Image.network(
+                  imageUrl!,
+                  fit: BoxFit.cover,
+                )
+              : Container(
+                  color: Colors.grey,
+                  child: const Center(
+                    child: Text('No Image'),
+                  ),
+                ),
+        ),
+        const SizedBox(height: 12),
         ElevatedButton(
-          onPressed: _isLoading ? null : _upload,
+          onPressed: () async {
+            final ImagePicker picker = ImagePicker();
+            final XFile? image =
+                await picker.pickImage(source: ImageSource.gallery);
+            if (image == null) {
+              return;
+            }
+            final imageExtension = image.path.split('.').last.toLowerCase();
+            final imageBytes = await image.readAsBytes();
+            final userId = supabase.auth.currentUser!.id;
+            final imagePath = '/$userId/profile';
+            await supabase.storage.from('profiller').uploadBinary(
+                  imagePath,
+                  imageBytes,
+                  fileOptions: FileOptions(
+                    upsert: true,
+                    contentType: 'image/$imageExtension',
+                  ),
+                );
+            String imageUrl =
+                supabase.storage.from('profiller').getPublicUrl(imagePath);
+            imageUrl = Uri.parse(imageUrl).replace(queryParameters: {
+              't': DateTime.now().millisecondsSinceEpoch.toString()
+            }).toString();
+            onUpload(imageUrl);
+          },
           child: const Text('Upload'),
         ),
       ],
     );
-  }
-
-  Future<void> _upload() async {
-    final picker = ImagePicker();
-    final imageFile = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 300,
-      maxHeight: 300,
-    );
-    if (imageFile == null) {
-      return;
-    }
-    setState(() => _isLoading = true);
-
-    try {
-      final bytes = await imageFile.readAsBytes();
-      final fileExt = imageFile.path.split('.').last;
-      final fileName = '${DateTime.now().toIso8601String()}.$fileExt';
-      final filePath = fileName;
-      await supabase.storage.from('avatars').uploadBinary(
-            filePath,
-            bytes,
-            fileOptions: FileOptions(contentType: imageFile.mimeType),
-          );
-      final imageUrlResponse = await supabase.storage
-          .from('avatars')
-          .createSignedUrl(filePath, 60 * 60 * 24 * 365 * 10);
-      widget.onUpload(imageUrlResponse);
-    } on StorageException catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error.message),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Unexpected error occurred'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
-    }
-
-    setState(() => _isLoading = false);
   }
 }
